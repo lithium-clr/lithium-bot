@@ -1,16 +1,14 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
-#EXPOSE 8080
-#EXPOSE 8081
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Discord/Lithium.Bot/Lithium.Bot.csproj", "Discord/Lithium.Bot/"]
-RUN dotnet restore "Discord/Lithium.Bot/Lithium.Bot.csproj"
+COPY ["Lithium.Bot/Lithium.Bot.csproj", "Lithium.Bot/"]
+RUN dotnet restore "Lithium.Bot/Lithium.Bot.csproj"
 COPY . .
-WORKDIR "/src/Discord/Lithium.Bot"
+WORKDIR "/src/Lithium.Bot"
 RUN dotnet build "./Lithium.Bot.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
