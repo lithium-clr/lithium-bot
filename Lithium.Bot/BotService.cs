@@ -19,6 +19,8 @@ public sealed class BotService(
         var token = config["Discord:Token"] 
                     ?? Environment.GetEnvironmentVariable("DISCORD_TOKEN");
         
+        Console.WriteLine("Token: " + token);
+        
         await client.LoginAsync(TokenType.Bot, token);
         await client.StartAsync();
     }
