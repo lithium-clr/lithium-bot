@@ -1,0 +1,34 @@
+name: Deploy Lithium Bot
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: bub-bl
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and Push Docker image
+        run: |
+          docker build -t ghcr.io/lithium-clr/bot:latest .
+          docker push ghcr.io/lithium-clr/bot:latest
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /opt/bot
+            docker compose pull
+            docker compose up -d
