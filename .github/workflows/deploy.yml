@@ -29,6 +29,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            export DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
             cd /opt/bot
             docker compose pull
             docker compose up -d
