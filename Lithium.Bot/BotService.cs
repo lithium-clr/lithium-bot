@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Discord;
 using Discord.WebSocket;
 
@@ -45,6 +44,6 @@ public sealed class BotService(
         if (message.Author.Id == client.CurrentUser.Id) return;
 
         if (message.Content == "!ping")
-            await message.Channel.SendMessageAsync("Pong!");
+            await message.Channel.SendMessageAsync($"Pong! 🏓 ({client.Latency}ms)");
     }
 }
