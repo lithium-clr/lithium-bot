@@ -15,6 +15,7 @@ public sealed class BotService(
         client.Log += OnLogAsync;
         client.Ready += OnReadyAsync;
         client.MessageReceived += OnMessageReceivedAsync;
+        client.UserJoined += OnUserJoinedAsync;
 
         var token = config["Discord:Token"] 
                     ?? Environment.GetEnvironmentVariable("DISCORD_TOKEN");
@@ -58,5 +59,13 @@ public sealed class BotService(
 
         if (message.Content == "!ping")
             await message.Channel.SendMessageAsync("Pong!");
+    }
+
+    private async Task OnUserJoinedAsync(SocketGuildUser user)
+    {
+        var defaultChannel = user.Guild.TextChannels.FirstOrDefault();
+        
+        if (defaultChannel is not null)
+            await defaultChannel.SendMessageAsync($"Welcome to the server, {user.Mention} !");
     }
 }
