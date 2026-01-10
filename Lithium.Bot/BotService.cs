@@ -23,14 +23,26 @@ public sealed class BotService(
         await client.StartAsync();
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+        await client.LogoutAsync();
+        await client.StopAsync();
     }
 
     private Task OnLogAsync(LogMessage log)
     {
-        logger.LogInformation(log.ToString());
+        var severity = log.Severity switch
+        {
+            LogSeverity.Critical => LogLevel.Critical,
+            LogSeverity.Error => LogLevel.Error,
+            LogSeverity.Warning => LogLevel.Warning,
+            LogSeverity.Info => LogLevel.Information,
+            LogSeverity.Verbose => LogLevel.Debug,
+            LogSeverity.Debug => LogLevel.Trace,
+            _ => LogLevel.Information
+        };
+        
+        logger.Log(severity, log.Exception, "[Discord] {Source}: {Message}", log.Source, log.Message);
         return Task.CompletedTask;
     }
 
