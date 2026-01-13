@@ -5,10 +5,10 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Lithium.Bot/Lithium.Bot.csproj", "Lithium.Bot/"]
-RUN dotnet restore "Lithium.Bot/Lithium.Bot.csproj"
+COPY ["src/Lithium.Bot/Lithium.Bot.csproj", "src/Lithium.Bot/"]
+RUN dotnet restore "src/Lithium.Bot/Lithium.Bot.csproj"
 COPY . .
-WORKDIR "/src/Lithium.Bot"
+WORKDIR "/src/src/Lithium.Bot"
 RUN dotnet build "./Lithium.Bot.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
