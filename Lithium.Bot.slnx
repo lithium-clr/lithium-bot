@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Src/">
+    <Project Path="src/Lithium.Bot/Lithium.Bot.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+  </Folder>
+</Solution>
