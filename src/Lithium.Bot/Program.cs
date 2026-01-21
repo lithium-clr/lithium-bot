@@ -1,6 +1,6 @@
 using Discord;
 using Discord.WebSocket;
-using Lithium.Bot;
+using Lithium.Bot.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 

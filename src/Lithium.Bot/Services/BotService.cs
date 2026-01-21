@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Lithium.Bot;
+namespace Lithium.Bot.Services;
 
 public sealed class BotService : IHostedService
 {
@@ -37,26 +37,34 @@ public sealed class BotService : IHostedService
     {
         try
         {
-            // Load Token from Configuration
-            var token = _config["Discord:Token"];
+            string? token;
+
+#if DEBUG
+            token = _config["Discord:Token"];
+#else
+        // Release: token from environment variable (Docker / CI)
+        token = Environment.GetEnvironmentVariable("DISCORD_TOKEN");
+#endif
 
             if (string.IsNullOrWhiteSpace(token))
             {
-                throw new InvalidOperationException("Token not found in appsettings.json (Section: Discord:Token).");
+                throw new InvalidOperationException(
+                    "Discord token not found. " +
+                    "DEBUG expects appsettings.json (Discord:Token). " +
+                    "RELEASE expects environment variable DISCORD_TOKEN."
+                );
             }
 
-            // Event Hooks
             _client.Log += OnLogAsync;
             _interactionService.Log += OnLogAsync;
             _client.Ready += OnReadyAsync;
 
-            // Only enable MessageReceived if you actually need to read every message (CPU intensive)
-            // _client.MessageReceived += OnMessageReceivedAsync; 
+            
+             //_client.MessageReceived += OnMessageReceivedAsync; 
 
             _client.UserJoined += OnUserJoinedAsync;
             _client.InteractionCreated += OnInteractionCreatedAsync;
 
-            // Load modules only once
             await _interactionService.AddModulesAsync(Assembly.GetEntryAssembly(), _services);
 
             await _client.LoginAsync(TokenType.Bot, token);
@@ -65,9 +73,10 @@ public sealed class BotService : IHostedService
         catch (Exception e)
         {
             _logger.LogError(e, "Critical failure starting BotService.");
-            throw; // Re-throw to stop application startup
+            throw; 
         }
     }
+
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
