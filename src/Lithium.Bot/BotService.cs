@@ -1,42 +1,78 @@
 using System.Reflection;
-using System.Runtime.InteropServices;
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Lithium.Bot;
 
-public sealed class BotService(
-    ILogger<BotService> logger,
-    IConfiguration config,
-    DiscordSocketClient client,
-    IServiceProvider services
-) : IHostedService
+public sealed class BotService : IHostedService
 {
-    private readonly InteractionService _interactionService = new(client);
+    private readonly ILogger<BotService> _logger;
+    private readonly IConfiguration _config;
+    private readonly DiscordSocketClient _client;
+    private readonly IServiceProvider _services;
+    private readonly InteractionService _interactionService;
+
+    // Flag to prevent re-registering commands on quick reconnections (Performance/Rate Limit)
+    private bool _isInitialized = false;
+
+    public BotService(
+        ILogger<BotService> logger,
+        IConfiguration config,
+        DiscordSocketClient client,
+        IServiceProvider services)
+    {
+        _logger = logger;
+        _config = config;
+        _client = client;
+        _services = services;
+        // Passing _client.Rest improves performance slightly for interactions
+        _interactionService = new InteractionService(_client.Rest);
+    }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        client.Log += OnLogAsync;
-        _interactionService.Log += OnLogAsync;
-        client.Ready += OnReadyAsync;
-        client.MessageReceived += OnMessageReceivedAsync;
-        client.UserJoined += OnUserJoinedAsync;
-        client.InteractionCreated += OnInteractionCreatedAsync;
+        try
+        {
+            // Load Token from Configuration
+            var token = _config["Discord:Token"];
 
-        await _interactionService.AddModulesAsync(Assembly.GetEntryAssembly(), services);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("Token not found in appsettings.json (Section: Discord:Token).");
+            }
 
-        var token = config["Discord:Token"] 
-                    ?? Environment.GetEnvironmentVariable("DISCORD_TOKEN");
-        
-        await client.LoginAsync(TokenType.Bot, token);
-        await client.StartAsync();
+            // Event Hooks
+            _client.Log += OnLogAsync;
+            _interactionService.Log += OnLogAsync;
+            _client.Ready += OnReadyAsync;
+
+            // Only enable MessageReceived if you actually need to read every message (CPU intensive)
+            // _client.MessageReceived += OnMessageReceivedAsync; 
+
+            _client.UserJoined += OnUserJoinedAsync;
+            _client.InteractionCreated += OnInteractionCreatedAsync;
+
+            // Load modules only once
+            await _interactionService.AddModulesAsync(Assembly.GetEntryAssembly(), _services);
+
+            await _client.LoginAsync(TokenType.Bot, token);
+            await _client.StartAsync();
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Critical failure starting BotService.");
+            throw; // Re-throw to stop application startup
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await client.LogoutAsync();
-        await client.StopAsync();
+        await _client.LogoutAsync();
+        await _client.StopAsync();
     }
 
     private Task OnLogAsync(LogMessage log)
@@ -51,48 +87,80 @@ public sealed class BotService(
             LogSeverity.Debug => LogLevel.Trace,
             _ => LogLevel.Information
         };
-        
-        logger.Log(severity, log.Exception, "[Discord] {Source}: {Message}", log.Source, log.Message);
+
+        _logger.Log(severity, log.Exception, "[Discord] {Source}: {Message}", log.Source, log.Message);
         return Task.CompletedTask;
     }
 
     private async Task OnReadyAsync()
     {
-        logger.LogInformation($"{client.CurrentUser} connected!");
+        // If already initialized, do nothing. Saves API calls on reconnect.
+        if (_isInitialized) return;
+
+        _logger.LogInformation("{User} connected!", _client.CurrentUser);
 
         try
         {
+            var guildIdStr = _config["Discord:DebugGuildId"];
+
+            if (ulong.TryParse(guildIdStr, out var guildId))
+            {
 #if DEBUG
-            // Using a guild-specific command registration for debug builds is faster.
-            await _interactionService.RegisterCommandsToGuildAsync(1451665796009951355);
+                // Fast registration for development server
+                _logger.LogInformation("DEBUG Mode: Registering commands to Guild {GuildId}...", guildId);
+                await _interactionService.RegisterCommandsToGuildAsync(guildId);
 #else
-            await _interactionService.RegisterCommandsGloballyAsync();
+                // Global registration (can take up to 1 hour to propagate)
+                _logger.LogInformation("RELEASE Mode: Registering commands Globally...");
+                await _interactionService.RegisterCommandsGloballyAsync();
 #endif
+            }
+            else
+            {
+                _logger.LogWarning("DebugGuildId not configured correctly in json.");
+            }
+
+            _isInitialized = true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Erreur lors de l'enregistrement des commandes slash");
+            _logger.LogError(ex, "Error registering Slash commands.");
         }
-        
-        await client.SetActivityAsync(new Game("lithium.run", ActivityType.Watching));
-    }
 
-    private async Task OnMessageReceivedAsync(SocketMessage message)
-    {
-        if (message.Author.Id == client.CurrentUser.Id) return;
+        await _client.SetActivityAsync(new Game("lithium.run", ActivityType.Watching));
     }
 
     private async Task OnInteractionCreatedAsync(SocketInteraction interaction)
     {
-        var ctx = new SocketInteractionContext(client, interaction);
-        await _interactionService.ExecuteCommandAsync(ctx, services);
+        try
+        {
+            var ctx = new SocketInteractionContext(_client, interaction);
+            await _interactionService.ExecuteCommandAsync(ctx, _services);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error executing interaction.");
+
+            if (interaction.Type == InteractionType.ApplicationCommand)
+            {
+                // Ephemeral message to user (only visible to them)
+                await interaction.RespondAsync("An internal error occurred while processing your command.", ephemeral: true);
+            }
+        }
     }
 
     private async Task OnUserJoinedAsync(SocketGuildUser user)
     {
         var defaultChannel = user.Guild.TextChannels.FirstOrDefault();
-        
+
         if (defaultChannel is not null)
-            await defaultChannel.SendMessageAsync($"Welcome to the server, {user.Mention} !");
+        {
+            // Check permissions to avoid 50013 errors
+            var permissions = user.Guild.CurrentUser.GetPermissions(defaultChannel);
+            if (permissions.SendMessages)
+            {
+                await defaultChannel.SendMessageAsync($"Welcome to the server, {user.Mention}!");
+            }
+        }
     }
 }
