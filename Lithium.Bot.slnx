@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Src/">
+    <Project Path="src/Lithium.BotWeb.Panel/Lithium.BotWeb.Panel.csproj" Id="5a9acfd2-2379-4398-b487-457ad36e3a8d" />
     <Project Path="src/Lithium.Bot/Lithium.Bot.csproj" />
   </Folder>
   <Folder Name="/Tests/">

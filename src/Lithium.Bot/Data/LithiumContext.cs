@@ -8,6 +8,7 @@ public class LithiumContext : DbContext
     {
     }
     public DbSet<UserEntity> Users { get; set; }
+    public DbSet<TokensEntity> Tokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -16,5 +17,10 @@ public class LithiumContext : DbContext
         modelBuilder.Entity<UserEntity>()
             .HasIndex(u => u.DiscordId)
             .IsUnique();
+
+        modelBuilder.Entity<TokensEntity>()
+            .HasIndex(t => t.Token)
+            .IsUnique();
+
     }
 }

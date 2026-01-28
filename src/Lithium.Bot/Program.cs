@@ -3,9 +3,9 @@ using Discord.WebSocket;
 using Lithium.Bot.Services;
 using Lithium.Bot.Data;
 using Microsoft.EntityFrameworkCore;
+using Lithium.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
-
 
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION");
 
@@ -22,6 +22,7 @@ builder.Services.AddSingleton<DiscordSocketClient>(_ => new DiscordSocketClient(
     GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildMembers
 }));
 builder.Services.AddSingleton<IUserService, UserService>();
+builder.Services.AddSingleton<ITokenService, TokenService>();
 
 builder.Services.AddHostedService<BotService>();
 

@@ -1,42 +1,79 @@
-using System.Reflection;
-using System.Runtime.InteropServices;
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
+using Lithium.Bot.Data;
+using Lithium.Bot.Entities;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using Lithium.Bot.Services;
 
 namespace Lithium.Bot;
 
-public sealed class BotService(
-    ILogger<BotService> logger,
-    IConfiguration config,
-    DiscordSocketClient client,
-    IServiceProvider services
-) : IHostedService
+public sealed class BotService : IHostedService
 {
-    private readonly InteractionService _interactionService = new(client);
+    private readonly ILogger<BotService> _logger;
+    private readonly IConfiguration _config;
+    private readonly DiscordSocketClient _client;
+    private readonly IServiceProvider _services;
+    private readonly InteractionService _interactionService;
+    private readonly IUserService _userService;
+
+    // Flag to prevent re-registering commands on quick reconnections (Performance/Rate Limit)
+    private bool _isInitialized = false;
+
+    public BotService(
+        ILogger<BotService> logger,
+        IConfiguration config,
+        IUserService userService,
+        DiscordSocketClient client,
+        IServiceProvider services)
+    {
+        _logger = logger;
+        _config = config;
+        _client = client;
+        _services = services;
+        _userService = userService;
+        // Passing _client.Rest improves performance slightly for interactions
+        _interactionService = new InteractionService(_client.Rest);
+    }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        client.Log += OnLogAsync;
-        _interactionService.Log += OnLogAsync;
-        client.Ready += OnReadyAsync;
-        client.MessageReceived += OnMessageReceivedAsync;
-        client.UserJoined += OnUserJoinedAsync;
-        client.InteractionCreated += OnInteractionCreatedAsync;
+        try
+        {
+            string? token;
 
-        await _interactionService.AddModulesAsync(Assembly.GetEntryAssembly(), services);
+            token = Environment.GetEnvironmentVariable("DISCORD_TOKEN");
 
-        var token = config["Discord:Token"] 
-                    ?? Environment.GetEnvironmentVariable("DISCORD_TOKEN");
-        
-        await client.LoginAsync(TokenType.Bot, token);
-        await client.StartAsync();
+            _client.Log += OnLogAsync;
+            _interactionService.Log += OnLogAsync;
+            _client.Ready += OnReadyAsync;
+
+
+            _client.MessageReceived += OnMessageReceivedAsync;
+            _client.UserJoined += OnUserJoinedAsync;
+            _client.InteractionCreated += OnInteractionCreatedAsync;
+
+            await _interactionService.AddModulesAsync(Assembly.GetEntryAssembly(), _services);
+
+            await _client.LoginAsync(TokenType.Bot, token);
+            await _client.StartAsync();
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Critical failure starting BotService.");
+            throw; 
+        }
     }
+
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await client.LogoutAsync();
-        await client.StopAsync();
+        await _client.LogoutAsync();
+        await _client.StopAsync();
     }
 
     private Task OnLogAsync(LogMessage log)
@@ -51,48 +88,82 @@ public sealed class BotService(
             LogSeverity.Debug => LogLevel.Trace,
             _ => LogLevel.Information
         };
-        
-        logger.Log(severity, log.Exception, "[Discord] {Source}: {Message}", log.Source, log.Message);
+
+        _logger.Log(severity, log.Exception, "[Discord] {Source}: {Message}", log.Source, log.Message);
         return Task.CompletedTask;
     }
 
     private async Task OnReadyAsync()
     {
-        logger.LogInformation($"{client.CurrentUser} connected!");
+        if (_isInitialized) return;
+
+        _logger.LogInformation("{User} connected!", _client.CurrentUser);
 
         try
         {
-#if DEBUG
-            // Using a guild-specific command registration for debug builds is faster.
-            await _interactionService.RegisterCommandsToGuildAsync(1451665796009951355);
-#else
+
             await _interactionService.RegisterCommandsGloballyAsync();
-#endif
+
+         
+
+            _isInitialized = true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Erreur lors de l'enregistrement des commandes slash");
+            _logger.LogError(ex, "Error registering Slash commands.");
         }
-        
-        await client.SetActivityAsync(new Game("lithium.run", ActivityType.Watching));
-    }
 
-    private async Task OnMessageReceivedAsync(SocketMessage message)
-    {
-        if (message.Author.Id == client.CurrentUser.Id) return;
+        await _client.SetActivityAsync(new Game("lithium.run", ActivityType.Watching));
     }
 
     private async Task OnInteractionCreatedAsync(SocketInteraction interaction)
     {
-        var ctx = new SocketInteractionContext(client, interaction);
-        await _interactionService.ExecuteCommandAsync(ctx, services);
-    }
+        try
+        {
+            var ctx = new SocketInteractionContext(_client, interaction);
+            await _interactionService.ExecuteCommandAsync(ctx, _services);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error executing interaction.");
 
+            if (interaction.Type == InteractionType.ApplicationCommand)
+            {
+                // Ephemeral message to user (only visible to them)
+                await interaction.RespondAsync("An internal error occurred while processing your command.", ephemeral: true);
+            }
+        }
+    }
+    private async Task OnMessageReceivedAsync(SocketMessage message)
+    {
+        if (message.Author.IsBot) return;
+        await (_ = _userService.EnsureUserExistsAsync(message.Author.Id, message.Author.Username));
+    }
     private async Task OnUserJoinedAsync(SocketGuildUser user)
     {
-        var defaultChannel = user.Guild.TextChannels.FirstOrDefault();
-        
-        if (defaultChannel is not null)
-            await defaultChannel.SendMessageAsync($"Welcome to the server, {user.Mention} !");
+        var channel = user.Guild.SystemChannel
+                      ?? user.Guild.TextChannels.FirstOrDefault(c =>
+                            user.Guild.CurrentUser.GetPermissions(c).SendMessages);
+
+        if (channel is not null)
+        {
+ 
+            var embed = new EmbedBuilder()
+            {
+  
+                Title = $"Welcome to {user.Guild.Name}! 🚀",
+                Description = $"Hey {user.Mention}, we are thrilled to have you here!\n" +
+                              "Please make sure to read the rules and introduce yourself.",
+                Color = Color.Gold,
+                Timestamp = DateTimeOffset.Now
+            };
+
+            embed.WithThumbnailUrl(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl());
+            embed.WithFooter(footer => {
+                footer.Text = $"Member #{user.Guild.MemberCount}";
+                footer.IconUrl = user.Guild.IconUrl;
+            });
+            await channel.SendMessageAsync(text: $"Welcome, {user.Mention}!", embed: embed.Build());
+        }
     }
 }

@@ -46,7 +46,7 @@ public class UserService : IUserService
                     var newUser = new UserEntity
                     {
                         DiscordId = discordId,
-                        NickName = username,
+                        UserName = username,
                         JoinedAt = DateTime.UtcNow,
                         Xp = 0
                        
