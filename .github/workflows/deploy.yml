@@ -1,7 +1,7 @@
 name: Deploy Lithium Bot
 
 on:
-  pull_request:
+  push:
     branches: [main]
 
 jobs:
@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Login GHCR (runner → push)
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -22,6 +23,7 @@ jobs:
           docker build -t ghcr.io/lithium-clr/bot:latest .
           docker push ghcr.io/lithium-clr/bot:latest
 
+      # Deploy serveur
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -29,7 +31,12 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            export DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+            set -e
+
             cd /opt/bot
+
+            # Login GHCR (serveur → pull)
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u bub-bl --password-stdin
+
             docker compose pull
-            docker compose up -d
+            docker compose up -d --remove-orphans
