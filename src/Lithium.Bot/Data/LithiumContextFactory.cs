@@ -1,21 +1,19 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using System;
 
-namespace Lithium.Bot.Data
+namespace Lithium.Bot.Data;
+
+public sealed class LithiumContextFactory : IDesignTimeDbContextFactory<LithiumContext>
 {
-    public class LithiumContextFactory : IDesignTimeDbContextFactory<LithiumContext>
+    public LithiumContext CreateDbContext(string[] args)
     {
-        public LithiumContext CreateDbContext(string[] args)
-        {
-            var optionsBuilder = new DbContextOptionsBuilder<LithiumContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<LithiumContext>();
 
-            string connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
-                ?? "Host=localhost;Database=lithium_db;Username=postgres;Password=";
+        var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
+                               ?? "Host=localhost;Database=lithium_db;Username=postgres;Password=";
 
-            optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(connectionString);
 
-            return new LithiumContext(optionsBuilder.Options);
-        }
+        return new LithiumContext(optionsBuilder.Options);
     }
 }

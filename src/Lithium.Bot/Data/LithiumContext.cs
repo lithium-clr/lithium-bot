@@ -1,12 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Lithium.Bot.Entities; 
+using Lithium.Bot.Entities;
+
 namespace Lithium.Bot.Data;
 
-public class LithiumContext : DbContext
+public sealed class LithiumContext(DbContextOptions<LithiumContext> options) : DbContext(options)
 {
-    public LithiumContext(DbContextOptions<LithiumContext> options) : base(options)
-    {
-    }
     public DbSet<UserEntity> Users { get; set; }
     public DbSet<TokensEntity> Tokens { get; set; }
 
@@ -21,6 +19,5 @@ public class LithiumContext : DbContext
         modelBuilder.Entity<TokensEntity>()
             .HasIndex(t => t.Token)
             .IsUnique();
-
     }
 }

@@ -8,11 +8,7 @@ using Lithium.Bot;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION");
-
-if (string.IsNullOrEmpty(connectionString))
-{
-    throw new InvalidOperationException("The variable 'DB_CONNECTION' not found");
-}
+ArgumentException.ThrowIfNullOrEmpty(connectionString);
 
 builder.Services.AddDbContext<LithiumContext>(options =>
     options.UseNpgsql(connectionString));

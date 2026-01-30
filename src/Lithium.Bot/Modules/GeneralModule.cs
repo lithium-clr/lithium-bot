@@ -1,36 +1,32 @@
 using Discord;
 using Discord.Interactions;
-using System.Diagnostics; 
+using System.Diagnostics;
 
 namespace Lithium.Bot.Modules;
 
 public sealed class GeneralModule : InteractionModuleBase<SocketInteractionContext>
 {
-
-    private static readonly HttpClient _httpClient = new HttpClient();
+    private static readonly HttpClient HttpClient = new();
 
     [SlashCommand("ping", "Checks bot latency and status page availability")]
     public async Task PingAsync()
     {
-
         await DeferAsync();
 
         var discordLatency = Context.Client.Latency;
 
-
-        var websiteUrl = "https://status.lithium.run";
+        const string websiteUrl = "https://status.lithium.run";
         string siteStatusText;
-        long siteLatencyMs = 0;
-        bool isUp = false;
+        long siteLatencyMs;
+        var isUp = false;
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
-
             using var requestMessage = new HttpRequestMessage(HttpMethod.Head, websiteUrl);
-            _httpClient.Timeout = TimeSpan.FromSeconds(5);
+            HttpClient.Timeout = TimeSpan.FromSeconds(5);
 
-            var response = await _httpClient.SendAsync(requestMessage);
+            var response = await HttpClient.SendAsync(requestMessage);
             stopwatch.Stop();
             siteLatencyMs = stopwatch.ElapsedMilliseconds;
 
@@ -51,13 +47,15 @@ public sealed class GeneralModule : InteractionModuleBase<SocketInteractionConte
 
         var embed = new EmbedBuilder()
             .WithTitle("🏓 System Status")
-            .WithUrl(websiteUrl) 
+            .WithUrl(websiteUrl)
             .WithColor(isUp ? Color.Green : Color.Red)
             .AddField("🤖 Bot Gateway", $"`{discordLatency}ms`", true)
             .AddField("🌐 Status Page", $"`{siteStatusText}`", true)
-            .WithFooter(new EmbedFooterBuilder { Text = "Lithium Systems", IconUrl = Context.Client.CurrentUser.GetAvatarUrl() })
+            .WithFooter(new EmbedFooterBuilder
+                { Text = "Lithium Systems", IconUrl = Context.Client.CurrentUser.GetAvatarUrl() })
             .WithCurrentTimestamp()
             .Build();
+        
         await FollowupAsync(embed: embed);
     }
 }
