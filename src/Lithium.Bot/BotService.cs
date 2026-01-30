@@ -84,6 +84,7 @@ public sealed class BotService(
 
         try
         {
+#if DEBUG
             var debugGuildString = Environment.GetEnvironmentVariable("DEBUG_GUILD");
 
             if (!string.IsNullOrEmpty(debugGuildString))
@@ -91,8 +92,9 @@ public sealed class BotService(
                 var debugGuildId = ulong.Parse(debugGuildString);
                 await _interactionService.RegisterCommandsToGuildAsync(debugGuildId);
             }
-
+#else
             await _interactionService.RegisterCommandsGloballyAsync();
+#endif
 
             _isInitialized = true;
         }
